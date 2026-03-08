@@ -1,22 +1,17 @@
 import json
 import logging
 import re
-import asyncio
 
 import requests
-from aiogram import Bot, Dispatcher, types
-from aiogram.client.default import DefaultBotProperties
+from aiogram import Bot, Dispatcher, executor, types
 
 import options
 
 logging.basicConfig(level=logging.INFO)
 
-bot = Bot(
-    token=options.token,
-    default=DefaultBotProperties(parse_mode="HTML")
-)
-
-dp = Dispatcher()
+bot = Bot(token=options.token)
+bot.parse_mode = 'html'
+dp = Dispatcher(bot)
 
 
 def get_answers(type_of_test, test_id):
@@ -28,20 +23,14 @@ def get_answers(type_of_test, test_id):
     return response.json()
 
 
-@dp.message()
+@dp.message_handler()
 async def test(message: types.Message):
-
     link_to_test = re.findall(r'(selftest/spec|training_spec|test_by_binding)/([\w]+)', message.text)
-
-    # ДОБАВЛЕНА ПРОВЕРКА (чтобы бот не падал)
-    if not link_to_test:
-        return await message.answer("Отправь ссылку на тест МЭШ")
 
     type_of_test, test_id = link_to_test[0]
     type_of_test = 'homework' if type_of_test == 'test_by_binding' else 'spec'
 
     response = get_answers(type_of_test, test_id)
-
     if 'error' in response:
         return await message.answer("ERROR")
 
@@ -54,29 +43,20 @@ async def test(message: types.Message):
         question = test_task['question_elements'][0]['text']
         type_of_question = test_task['answer']['type']
         right_answer = test_task['answer']['right_answer']
-
         if type_of_question == 'answer/number':
             right_answer = right_answer['number']
-
         elif type_of_question == 'answer/string':
             right_answer = right_answer['string']
-
         elif type_of_question == 'answer/single':
             variants = test_task['answer']['options']
             for i in variants:
                 if i['id'] in right_answer['id']:
                     right_answer = i['text']
                     break
-
         else:
             continue
-
         await message.answer(f'<b>{question}</b>\n\n🙈ОТВЕТ: <i>{right_answer}</i>')
 
 
-async def main():
-    await dp.start_polling(bot)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
